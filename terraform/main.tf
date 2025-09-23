@@ -1,7 +1,9 @@
 ################################################################################
-# THrpC - NFT-Gated RPC Infrastructure
+# THrpC - NFT-Gated RPC Infrastructure (Simplified POC)
 # Open Source Infrastructure for Tiny Hyper Cats Community
 # High-Performance RPC Access for the Hyperliquid Ecosystem
+# 
+# SIMPLIFIED VERSION: Direct Lambda -> EC2 connection (no ELB)
 ################################################################################
 
 terraform {
@@ -16,9 +18,9 @@ terraform {
   
   # Store state in S3 (recommended for production)
   backend "s3" {
-    bucket = "thrpc-terraform-state"  # Change this to your bucket name!
+    bucket = "thrpc-terraform-state"
     key    = "thrpc/terraform.tfstate"
-    region = "us-west-2"  # Must match where you created the bucket
+    region = "us-west-2"
     encrypt = true
   }
 }
@@ -66,7 +68,6 @@ variable "allowed_ssh_cidr" {
 variable "nft_contract_addresses" {
   description = "List of NFT contract addresses for access gating (Tiny Hyper Cats and any partner collections)"
   type        = list(string)
-  # You'll set this via terraform.tfvars or environment variable
 }
 
 variable "ssh_public_key_path" {
@@ -102,7 +103,6 @@ provider "aws" {
 # VPC and Networking
 ################################################################################
 
-# Create VPC for isolated network
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true
@@ -113,7 +113,6 @@ resource "aws_vpc" "main" {
   }
 }
 
-# Internet Gateway for public access
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
@@ -122,7 +121,6 @@ resource "aws_internet_gateway" "main" {
   }
 }
 
-# Public subnets for node and ALB
 resource "aws_subnet" "public_a" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.1.0/24"
@@ -145,7 +143,6 @@ resource "aws_subnet" "public_c" {
   }
 }
 
-# Route table for public subnets
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
@@ -173,7 +170,6 @@ resource "aws_route_table_association" "public_c" {
 # Security Groups
 ################################################################################
 
-# Security group for Hyperliquid node
 resource "aws_security_group" "node" {
   name        = "${var.project_name}-node-sg"
   description = "Security group for Hyperliquid node"
@@ -237,13 +233,13 @@ resource "aws_security_group" "node" {
     description = "Hyperliquid gossip - must be public"
   }
 
-  # EVM RPC port (only from ALB)
+  # EVM RPC port (from Lambda)
   ingress {
     from_port       = 3001
     to_port         = 3001
     protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-    description     = "EVM RPC from ALB"
+    security_groups = [aws_security_group.lambda.id]
+    description     = "EVM RPC from Lambda"
   }
 
   # Allow all outbound
@@ -260,13 +256,13 @@ resource "aws_security_group" "node" {
   }
 }
 
-# Security group for Application Load Balancer
+# Security group for ALB (kept for future use, not currently used)
 resource "aws_security_group" "alb" {
   name        = "${var.project_name}-alb-sg"
   description = "Security group for ALB"
   vpc_id      = aws_vpc.main.id
 
-  # HTTPS from Lambda
+  # HTTPS from Lambda (for future use)
   ingress {
     from_port       = 443
     to_port         = 443
@@ -275,7 +271,6 @@ resource "aws_security_group" "alb" {
     description     = "HTTPS from Lambda"
   }
 
-  # Allow all outbound
   egress {
     from_port   = 0
     to_port     = 0
@@ -295,7 +290,7 @@ resource "aws_security_group" "lambda" {
   description = "Security group for Lambda functions"
   vpc_id      = aws_vpc.main.id
 
-  # Allow all outbound (Lambda needs to reach ALB, DynamoDB, etc)
+  # Allow all outbound (Lambda needs to reach node, DynamoDB, etc)
   egress {
     from_port   = 0
     to_port     = 0
@@ -313,7 +308,6 @@ resource "aws_security_group" "lambda" {
 # EC2 Instance for Hyperliquid Node
 ################################################################################
 
-# Get latest Ubuntu 24.04 AMI
 data "aws_ami" "ubuntu" {
   most_recent = true
   owners      = ["099720109477"] # Canonical
@@ -329,13 +323,11 @@ data "aws_ami" "ubuntu" {
   }
 }
 
-# SSH key pair
 resource "aws_key_pair" "node" {
   key_name   = "${var.project_name}-node-key"
   public_key = file(pathexpand(var.ssh_public_key_path))
 }
 
-# EC2 instance for Hyperliquid node
 resource "aws_instance" "node" {
   ami           = data.aws_ami.ubuntu.id
   instance_type = var.node_instance_type
@@ -344,13 +336,11 @@ resource "aws_instance" "node" {
 
   vpc_security_group_ids = [aws_security_group.node.id]
 
-  # Root volume for OS
   root_block_device {
     volume_size = 20
     volume_type = "gp3"
   }
 
-  # Additional volume for blockchain data
   ebs_block_device {
     device_name = "/dev/sdf"
     volume_size = var.node_volume_size
@@ -371,12 +361,10 @@ resource "aws_instance" "node" {
     Role = "hyperliquid-node"
   }
 
-  # Ensure node keeps running
   monitoring              = true
   disable_api_termination = false
 }
 
-# Elastic IP for consistent node address
 resource "aws_eip" "node" {
   domain   = "vpc"
   instance = aws_instance.node.id
@@ -390,7 +378,6 @@ resource "aws_eip" "node" {
 # IAM Roles and Policies
 ################################################################################
 
-# IAM role for EC2 node
 resource "aws_iam_role" "node" {
   name = "${var.project_name}-node-role"
 
@@ -408,7 +395,6 @@ resource "aws_iam_role" "node" {
   })
 }
 
-# Allow node to write logs to CloudWatch
 resource "aws_iam_role_policy_attachment" "node_cloudwatch" {
   role       = aws_iam_role.node.name
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
@@ -419,7 +405,6 @@ resource "aws_iam_instance_profile" "node" {
   role = aws_iam_role.node.name
 }
 
-# IAM role for Lambda functions
 resource "aws_iam_role" "lambda" {
   name = "${var.project_name}-lambda-role"
 
@@ -437,19 +422,16 @@ resource "aws_iam_role" "lambda" {
   })
 }
 
-# Lambda basic execution policy
 resource "aws_iam_role_policy_attachment" "lambda_basic" {
   role       = aws_iam_role.lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# Lambda VPC execution policy
 resource "aws_iam_role_policy_attachment" "lambda_vpc" {
   role       = aws_iam_role.lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-# Custom policy for Lambda to access DynamoDB and Secrets Manager
 resource "aws_iam_role_policy" "lambda_custom" {
   name = "${var.project_name}-lambda-policy"
   role = aws_iam_role.lambda.id
@@ -482,101 +464,12 @@ resource "aws_iam_role_policy" "lambda_custom" {
 }
 
 ################################################################################
-# Application Load Balancer
-################################################################################
-
-resource "aws_lb" "main" {
-  name               = "${var.project_name}-alb"
-  internal           = true  # Internal - only Lambda can access
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.alb.id]
-  subnets            = [aws_subnet.public_a.id, aws_subnet.public_c.id]
-
-  tags = {
-    Name = "${var.project_name}-alb"
-  }
-}
-
-resource "aws_lb_target_group" "node" {
-  name     = "${var.project_name}-node-tg"
-  port     = 3001
-  protocol = "HTTP"
-  vpc_id   = aws_vpc.main.id
-
-  health_check {
-    enabled             = true
-    path                = "/"
-    port                = "3001"
-    protocol            = "HTTP"
-    healthy_threshold   = 2
-    unhealthy_threshold = 3
-    timeout             = 5
-    interval            = 30
-  }
-
-  tags = {
-    Name = "${var.project_name}-node-tg"
-  }
-}
-
-resource "aws_lb_target_group_attachment" "node" {
-  target_group_arn = aws_lb_target_group.node.arn
-  target_id        = aws_instance.node.id
-  port             = 3001
-}
-
-resource "aws_lb_listener" "node" {
-  load_balancer_arn = aws_lb.main.arn
-  port              = "443"
-  protocol          = "HTTPS"
-  certificate_arn   = aws_acm_certificate.alb.arn
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.node.arn
-  }
-}
-
-# Self-signed certificate for ALB (internal use)
-resource "aws_acm_certificate" "alb" {
-  private_key      = tls_private_key.alb.private_key_pem
-  certificate_body = tls_self_signed_cert.alb.cert_pem
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-resource "tls_private_key" "alb" {
-  algorithm = "RSA"
-  rsa_bits  = 2048
-}
-
-resource "tls_self_signed_cert" "alb" {
-  private_key_pem = tls_private_key.alb.private_key_pem
-
-  subject {
-    common_name  = "${var.project_name}-alb.local"
-    organization = var.project_name
-  }
-
-  validity_period_hours = 87600  # 10 years
-
-  allowed_uses = [
-    "key_encipherment",
-    "digital_signature",
-    "server_auth",
-  ]
-}
-
-################################################################################
 # DynamoDB Tables
 ################################################################################
 
-# Auth cache table - stores verified NFT holders
 resource "aws_dynamodb_table" "auth_cache" {
   name         = "${var.project_name}-auth-cache"
-  billing_mode = "PAY_PER_REQUEST"  # On-demand pricing
+  billing_mode = "PAY_PER_REQUEST"
   hash_key     = "wallet_address"
 
   attribute {
@@ -594,7 +487,6 @@ resource "aws_dynamodb_table" "auth_cache" {
   }
 }
 
-# Rate limiting table
 resource "aws_dynamodb_table" "rate_limits" {
   name         = "${var.project_name}-rate-limits"
   billing_mode = "PAY_PER_REQUEST"
@@ -625,7 +517,6 @@ resource "aws_dynamodb_table" "rate_limits" {
 # Secrets Manager
 ################################################################################
 
-# JWT signing secret
 resource "aws_secretsmanager_secret" "jwt" {
   name                    = var.jwt_secret_name
   description             = "JWT signing secret for RPC authentication"
@@ -636,7 +527,6 @@ resource "aws_secretsmanager_secret" "jwt" {
   }
 }
 
-# Generate random secret value
 resource "random_password" "jwt" {
   length  = 64
   special = true
@@ -651,7 +541,6 @@ resource "aws_secretsmanager_secret_version" "jwt" {
 # Lambda Functions (Placeholder - will be deployed separately)
 ################################################################################
 
-# Lambda function for NFT authentication
 resource "aws_lambda_function" "auth" {
   filename         = "${path.module}/../lambda/auth/auth.zip"
   function_name    = "${var.project_name}-auth"
@@ -667,7 +556,7 @@ resource "aws_lambda_function" "auth" {
       NFT_CONTRACT_ADDRESSES = jsonencode(var.nft_contract_addresses)
       AUTH_CACHE_TABLE       = aws_dynamodb_table.auth_cache.name
       JWT_SECRET_NAME        = aws_secretsmanager_secret.jwt.name
-      NODE_RPC_URL           = "https://${aws_eip.node.public_ip}:3001"
+      NODE_RPC_URL           = "http://${aws_instance.node.private_ip}:3001"
     }
   }
 
@@ -681,7 +570,6 @@ resource "aws_lambda_function" "auth" {
   }
 }
 
-# Lambda function for RPC proxy
 resource "aws_lambda_function" "rpc_proxy" {
   filename         = "${path.module}/../lambda/rpc_proxy/rpc_proxy.zip"
   function_name    = "${var.project_name}-rpc-proxy"
@@ -696,7 +584,7 @@ resource "aws_lambda_function" "rpc_proxy" {
     variables = {
       RATE_LIMIT_TABLE = aws_dynamodb_table.rate_limits.name
       JWT_SECRET_NAME  = aws_secretsmanager_secret.jwt.name
-      ALB_URL          = "https://${aws_lb.main.dns_name}"
+      NODE_RPC_URL     = "http://${aws_instance.node.private_ip}:3001"
     }
   }
 
@@ -720,13 +608,12 @@ resource "aws_apigatewayv2_api" "main" {
   description   = "NFT-Gated RPC API"
 
   cors_configuration {
-    allow_origins = ["*"]  # Adjust for production
+    allow_origins = ["*"]
     allow_methods = ["POST", "OPTIONS"]
     allow_headers = ["content-type", "authorization"]
   }
 }
 
-# Auth endpoint
 resource "aws_apigatewayv2_integration" "auth" {
   api_id             = aws_apigatewayv2_api.main.id
   integration_type   = "AWS_PROXY"
@@ -740,7 +627,6 @@ resource "aws_apigatewayv2_route" "auth" {
   target    = "integrations/${aws_apigatewayv2_integration.auth.id}"
 }
 
-# RPC endpoint
 resource "aws_apigatewayv2_integration" "rpc" {
   api_id             = aws_apigatewayv2_api.main.id
   integration_type   = "AWS_PROXY"
@@ -754,7 +640,6 @@ resource "aws_apigatewayv2_route" "rpc" {
   target    = "integrations/${aws_apigatewayv2_integration.rpc.id}"
 }
 
-# Deployment stage
 resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.main.id
   name        = "$default"
@@ -775,7 +660,6 @@ resource "aws_apigatewayv2_stage" "default" {
   }
 }
 
-# Lambda permissions for API Gateway
 resource "aws_lambda_permission" "auth" {
   statement_id  = "AllowAPIGatewayInvoke"
   action        = "lambda:InvokeFunction"
@@ -825,14 +709,14 @@ output "node_public_ip" {
   value       = aws_eip.node.public_ip
 }
 
+output "node_private_ip" {
+  description = "Private IP of Hyperliquid node"
+  value       = aws_instance.node.private_ip
+}
+
 output "node_instance_id" {
   description = "EC2 instance ID of Hyperliquid node"
   value       = aws_instance.node.id
-}
-
-output "alb_dns_name" {
-  description = "DNS name of Application Load Balancer"
-  value       = aws_lb.main.dns_name
 }
 
 output "auth_cache_table" {
