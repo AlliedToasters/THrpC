@@ -1,0 +1,79 @@
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform/
+.terraform.lock.hcl
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+*.egg-info/
+dist/
+build/
+*.zip
+
+# Lambda packages - we rebuild these
+lambda/*/site-packages/
+lambda/*/*.dist-info/
+lambda/*/*.egg-info/
+lambda/*/bin/
+lambda/*/certifi/
+lambda/*/charset_normalizer/
+lambda/*/idna/
+lambda/*/requests/
+lambda/*/urllib3/
+lambda/*/boto3/
+lambda/*/botocore/
+lambda/*/web3/
+lambda/*/eth_*/
+lambda/*/aiohttp/
+lambda/*/multidict/
+lambda/*/yarl/
+lambda/*/frozenlist/
+lambda/*/aiosignal/
+lambda/*/async_timeout/
+lambda/*/attrs/
+lambda/*/hexbytes/
+lambda/*/rlp/
+lambda/*/cytoolz/
+lambda/*/toolz/
+lambda/*/bitarray/
+lambda/*/pycryptodome/
+lambda/*/Crypto/
+lambda/*/jwt/
+lambda/*/PyJWT*/
+
+# Keep only our source files
+!lambda/*/handler.py
+!lambda/*/requirements.txt
+
+# AWS
+.aws/
+*.pem
+*.key
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+secrets.json
+.env
+*.secret
