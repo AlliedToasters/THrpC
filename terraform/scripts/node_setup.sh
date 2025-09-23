@@ -1,5 +1,5 @@
 #!/bin/bash
-# THrpC Node initialization script for Ubuntu 22.04
+# THrpC Node initialization script for Ubuntu 24.04
 # Tiny Hyper Cats Community - High-Performance RPC Infrastructure
 
 set -e
@@ -34,8 +34,15 @@ cd /home/ubuntu
 curl https://binaries.hyperliquid.xyz/Mainnet/hl-visor > hl-visor
 chmod +x hl-visor
 
-# Create systemd service for node
-cat > /etc/systemd/system/hyperliquid-node.service << 'EOF'
+# Create visor config file
+cat > /home/ubuntu/visor.json << 'VISOR_EOF'
+{
+  "chain": "Mainnet"
+}
+VISOR_EOF
+
+# Create systemd service for node (without --evm flag)
+cat > /etc/systemd/system/hyperliquid-node.service << 'SERVICE_EOF'
 [Unit]
 Description=Hyperliquid Node
 After=network.target
@@ -44,13 +51,13 @@ After=network.target
 Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu
-ExecStart=/home/ubuntu/hl-visor run-non-validator --evm
+ExecStart=/home/ubuntu/hl-visor run-non-validator
 Restart=always
 RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
-EOF
+SERVICE_EOF
 
 # Enable and start service
 systemctl daemon-reload
