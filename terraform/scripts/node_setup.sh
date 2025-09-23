@@ -16,7 +16,8 @@ apt-get install -y \
     wget \
     jq \
     htop \
-    unzip
+    unzip \
+    gpg
 
 # Mount and format EBS volume for blockchain data
 if [ -b /dev/nvme1n1 ]; then
@@ -29,19 +30,35 @@ fi
 # Set ownership
 chown -R ubuntu:ubuntu /home/ubuntu/hl
 
+# Create data directories
+sudo -u ubuntu mkdir -p /home/ubuntu/hl/hyperliquid_data
+sudo -u ubuntu mkdir -p /home/ubuntu/hl/data
+
 # Download Hyperliquid visor binary
 cd /home/ubuntu
-curl https://binaries.hyperliquid.xyz/Mainnet/hl-visor > hl-visor
+sudo -u ubuntu curl https://binaries.hyperliquid.xyz/Mainnet/hl-visor > hl-visor
 chmod +x hl-visor
+chown ubuntu:ubuntu hl-visor
+
+# Import Hyperliquid GPG public key
+sudo -u ubuntu wget https://raw.githubusercontent.com/hyperliquid-dex/node/main/pub_key.asc
+sudo -u ubuntu gpg --import pub_key.asc
 
 # Create visor config file
-cat > /home/ubuntu/visor.json << 'VISOR_EOF'
+sudo -u ubuntu bash -c 'cat > /home/ubuntu/visor.json << VISOR_EOF
 {
   "chain": "Mainnet"
 }
-VISOR_EOF
+VISOR_EOF'
 
-# Create systemd service for node (without --evm flag)
+# Create node config with EVM enabled
+sudo -u ubuntu bash -c 'cat > /home/ubuntu/hl/hyperliquid_data/node_config.json << NODE_EOF
+{
+  "evm": true
+}
+NODE_EOF'
+
+# Create systemd service for node
 cat > /etc/systemd/system/hyperliquid-node.service << 'SERVICE_EOF'
 [Unit]
 Description=Hyperliquid Node
@@ -51,9 +68,12 @@ After=network.target
 Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu
+Environment="HOME=/home/ubuntu"
 ExecStart=/home/ubuntu/hl-visor run-non-validator
 Restart=always
 RestartSec=10
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
@@ -65,3 +85,6 @@ systemctl enable hyperliquid-node
 systemctl start hyperliquid-node
 
 echo "=== THrpC Node Setup Complete ==="
+echo "Monitor logs with: sudo journalctl -u hyperliquid-node -f"
+echo "Note: Node needs to find peers and sync. This can take 10-30 minutes to start."
+echo "EVM RPC on port 3001 will be available after substantial sync progress."
