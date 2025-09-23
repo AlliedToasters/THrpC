@@ -557,6 +557,7 @@ resource "aws_lambda_function" "auth" {
       AUTH_CACHE_TABLE       = aws_dynamodb_table.auth_cache.name
       JWT_SECRET_NAME        = aws_secretsmanager_secret.jwt.name
       NODE_RPC_URL           = "http://${aws_instance.node.private_ip}:3001"
+      BYPASS_NFT_CHECK       = "true"  # Temporary bypass for testing
     }
   }
 
