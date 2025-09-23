@@ -23,36 +23,13 @@ dist/
 build/
 *.zip
 
-# Lambda packages - we rebuild these
-lambda/*/site-packages/
-lambda/*/*.dist-info/
-lambda/*/*.egg-info/
-lambda/*/bin/
-lambda/*/certifi/
-lambda/*/charset_normalizer/
-lambda/*/idna/
-lambda/*/requests/
-lambda/*/urllib3/
-lambda/*/boto3/
-lambda/*/botocore/
-lambda/*/web3/
-lambda/*/eth_*/
-lambda/*/aiohttp/
-lambda/*/multidict/
-lambda/*/yarl/
-lambda/*/frozenlist/
-lambda/*/aiosignal/
-lambda/*/async_timeout/
-lambda/*/attrs/
-lambda/*/hexbytes/
-lambda/*/rlp/
-lambda/*/cytoolz/
-lambda/*/toolz/
-lambda/*/bitarray/
-lambda/*/pycryptodome/
-lambda/*/Crypto/
-lambda/*/jwt/
-lambda/*/PyJWT*/
+# Lambda - ignore everything except our source files
+lambda/auth/*
+!lambda/auth/handler.py
+!lambda/auth/requirements.txt
+lambda/rpc_proxy/*
+!lambda/rpc_proxy/handler.py
+!lambda/rpc_proxy/requirements.txt
 
 # Keep only our source files
 !lambda/*/handler.py
